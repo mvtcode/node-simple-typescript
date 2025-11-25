@@ -33,6 +33,7 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
-    "dotenv": "^17.2.3"
+    "dotenv": "^17.2.3",
+    "ldapts": "^8.0.9"
   }
 }

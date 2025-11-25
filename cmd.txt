@@ -1,0 +1,8 @@
+// Tunnel LDAP AD dev
+ssh -N -L 127.0.0.1:1636:172.16.220.207:636 tanmv@10.0.20.254
+ssh -N -L 127.0.0.1:1389:172.16.220.207:389 tanmv@10.0.20.254
+
+// Test LDAP
+LDAPTLS_REQCERT=never ldapsearch -x -H ldaps://127.0.0.1:1636 -D "CN=Administrator,CN=Users,DC=nextpay,DC=local" -W -b "dc=nextpay,dc=local"
+
+LDAPTLS_REQCERT=never ldapsearch -x -H ldap://127.0.0.1:1389 -D "CN=Administrator,CN=Users,DC=nextpay,DC=local" -W -b "dc=nextpay,dc=local"
