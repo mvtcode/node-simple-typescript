@@ -1,21 +1,22 @@
 import './utils/config.util';
 import { answerWithContext, getEmbedding } from './services/openai.service';
-import mongoose from 'mongoose';
-import { findSimilarChunks } from './services/chunk.service';
+import { RedisClient, VectorSearchResult } from './services/redis.service';
 
 (async () => {
-  mongoose.set('debug', true);
-  await mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/rag');
-  console.log('Connected database');
+  const redisClient = RedisClient.getInstance();
+  await redisClient.connect();
 
   const question = 'Khởi động máy tính như thế nào?';
   console.log('User:', question);
 
   const questionEmbedding = await getEmbedding(question);
-  const topChunks = await findSimilarChunks(questionEmbedding, 3);
+  const topChunks = await redisClient.searchKNN(questionEmbedding, 3);
 
   const context = topChunks
-    .map((c, i) => `Chunk ${i + 1} (score: ${c.similarity.toFixed(3)}):\n${c.chunk.text}`)
+    .map(
+      (chunk: VectorSearchResult, i: number) =>
+        `Chunk ${i + 1} (doc: ${chunk.docId}, distance: ${chunk.distance.toFixed(4)}):\n${chunk.content}`
+    )
     .join('\n\n---\n\n');
 
   const answer = await answerWithContext(question, context);
@@ -25,9 +26,10 @@ import { findSimilarChunks } from './services/chunk.service';
 
   /*
   User: Khởi động máy tính như thế nào?
-  AI: Để khởi động máy tính, bạn cần thực hiện các bước sau:
-  1. Nhấn nút nguồn trên máy tính để bắt đầu quá trình khởi động.
-  2. Khi màn hình login xuất hiện, nhập mật khẩu hoặc PIN (nếu có).
-  3. Bạn cũng có thể sử dụng vân tay hoặc nhận diện khuôn mặt trên thiết bị hỗ trợ Windows Hello để đăng nhập vào máy tính.
+  AI: Để khởi động máy tính Windows, bạn làm theo các bước sau:
+
+  - Nhấn nút nguồn để mở máy.
+  - Khi màn hình đăng nhập (login) xuất hiện, nhập mật khẩu hoặc PIN (nếu có).
+  - Nếu thiết bị hỗ trợ Windows Hello, bạn cũng có thể đăng nhập bằng vân tay hoặc nhận diện khuôn mặt.
   */
 })();
