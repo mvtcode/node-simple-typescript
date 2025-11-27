@@ -2,10 +2,10 @@ import './utils/config.util';
 import path from 'path';
 import { extractTextFromDocx } from './utils/file.util';
 import { chunkText } from './utils/chunk.util';
-import { v4 as uuidv4 } from 'uuid';
 import { getEmbedding } from './services/openai.service';
-import { ChunkModel } from './models/chunk.model';
 import mongoose from 'mongoose';
+import { insertChunks } from './services/chunk.service';
+import { IChunk } from './interfaces/chunk.interface';
 
 (async () => {
   mongoose.set('debug', true);
@@ -22,27 +22,15 @@ import mongoose from 'mongoose';
   const chunksLength = chunks.length;
   console.log('Total chunks', chunksLength);
 
-  const now = new Date();
-  const docId = uuidv4();
-  const chunkDocs = [];
-  for (let i = 0; i < chunksLength; i++) {
-    const text = chunks[i];
-    const emb = await getEmbedding(text); // sequential; you can batch if needed
+  const chunkDocs: IChunk[] = [];
+  for (const content of chunks) {
+    const emb = await getEmbedding(content); // sequential; you can batch if needed
     chunkDocs.push({
-      docId,
-      text,
+      content,
       embedding: emb,
-      createdAt: now,
     });
-    // await ChunkModel.insertOne({
-    //   docId,
-    //   text,
-    //   embedding: emb,
-    //   createdAt: now,
-    // });
-    // console.log(`Saved ${i + 1}/${chunksLength}`);
   }
-  await ChunkModel.insertMany(chunkDocs);
+  await insertChunks(chunkDocs);
   console.log('Import done!');
   process.exit(0);
 })();

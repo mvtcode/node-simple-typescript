@@ -8,22 +8,10 @@ export async function getEmbedding(text: string): Promise<number[]> {
     input: text,
   });
 
-  // @ts-ignore
-  return resp.data[0].embedding as number[];
+  return resp.data[0].embedding as unknown as number[];
 }
 
 export async function answerWithContext(question: string, context: string) {
-  // const messages = [
-  //   {
-  //     role: 'system',
-  //     content: 'You are a helpful AI assistant. Use the provided context to answer:',
-  //   },
-  //   {
-  //     role: 'user',
-  //     content: `Context:\n${context}\n\nQuestion: ${question}`,
-  //   },
-  // ];
-
   const resp = await client.chat.completions.create({
     model: process.env.OPENAI_RAG_MODEL ?? 'gpt-4.1-mini',
     temperature: 0.2,
@@ -41,6 +29,5 @@ export async function answerWithContext(question: string, context: string) {
     frequency_penalty: 0,
   });
 
-  // @ts-ignore
   return resp.choices?.[0]?.message?.content ?? '';
 }

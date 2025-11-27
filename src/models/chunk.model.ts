@@ -1,28 +1,18 @@
-// src/models/Chunk.ts
 import mongoose, { Schema, Document } from 'mongoose';
+import { IChunk } from '../interfaces/chunk.interface';
 
-export interface IChunkDocument extends Document {
-  docId: string;
-  text: string;
-  embedding: number[]; // vector
-  createdAt: Date;
-}
+export interface IChunkDocument extends IChunk, Document {}
 
 const ChunkSchema = new Schema<IChunkDocument>(
   {
-    docId: { type: String, required: true },
-    text: { type: String, required: true },
+    content: { type: String, required: true },
     embedding: { type: [Number], required: true },
-    createdAt: { type: Date },
   },
   {
     versionKey: false,
     timestamps: true,
-    collection: 'rag-chunks',
+    collection: 'rag',
   }
 );
-
-// Tạo index nếu cần
-ChunkSchema.index({ docId: 1 });
 
 export const ChunkModel = mongoose.model<IChunkDocument>('chunks', ChunkSchema);

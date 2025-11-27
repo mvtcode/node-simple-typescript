@@ -1,45 +1,43 @@
-import { ChunkModel, IChunkDocument } from '../models/chunk.model';
-import { calculateCosineSimilarity } from '../utils/chunk.util';
+import { IChunk } from '../interfaces/chunk.interface';
+import { ChunkModel } from '../models/chunk.model';
 
-export const insertChunk = ({
-  docId,
-  text,
-  embedding,
-}: {
-  docId: string;
-  text: string;
-  embedding: number[];
-}) => {
-  return ChunkModel.insertOne({
-    docId,
-    text,
-    embedding,
-    createdAt: new Date(),
-  });
+export const insertChunk = (chunk: IChunk) => {
+  return ChunkModel.insertOne(chunk);
+};
+
+export const insertChunks = (chunks: IChunk[]) => {
+  return ChunkModel.insertMany(chunks);
 };
 
 export const findSimilarChunks = async (
   queryEmbedding: number[],
   limit: number = 3
 ): Promise<
-  Array<{
-    chunk: IChunkDocument;
-    similarity: number;
-  }>
+  {
+    content: string;
+    score: number;
+  }[]
 > => {
-  // get all chunks
-  const chunks = await ChunkModel.find({
-    embedding: { $exists: true, $ne: [] },
-  }).exec();
+  const results = await ChunkModel.aggregate([
+    {
+      $vectorSearch: {
+        index: 'vector_index', // tên index bạn đã tạo
+        path: 'embedding', // field vector
+        queryVector: queryEmbedding, // vector query
+        numCandidates: 100, // càng cao càng chính xác
+        limit: limit,
+      },
+    },
+    {
+      $project: {
+        content: 1,
+        score: { $meta: 'vectorSearchScore' },
+      },
+    },
+  ]);
 
-  // Calculate cosine similarity
-  const similarities = chunks.map((chunk) => ({
-    chunk,
-    similarity: calculateCosineSimilarity(queryEmbedding, chunk.embedding),
-  }));
-
-  // Sort by similarity
-  const sortedSimilarities = similarities.sort((a, b) => b.similarity - a.similarity);
-
-  return sortedSimilarities.slice(0, limit);
+  return results as unknown as {
+    content: string;
+    score: number;
+  }[];
 };
