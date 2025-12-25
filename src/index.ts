@@ -47,47 +47,99 @@ dotenv.config();
   });
 
   // const result = await runner.run(agent, 'Mã lỗi 9999 là mã lỗi gì?');
-  const result = await runner.run(agent, [
+  const result = await runner.run(
+    agent,
+    [
+      {
+        role: 'user',
+        content: 'Xin chào',
+      },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'output_text',
+            text: 'Xin chào bạn, tôi có thể giúp gì được cho bạn?',
+          },
+        ],
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: 'Đây là mã lỗi gì?',
+          },
+          {
+            type: 'input_image',
+            image: 'https://files-techsupport.hpscamera.com/error-analysis/error-9999.jpg',
+          },
+        ],
+      },
+    ],
     {
-      role: 'user',
-      content: [
-        {
-          type: 'input_text',
-          text: 'Đây là mã lỗi gì?',
-        },
-        {
-          type: 'input_image',
-          image: 'https://files-techsupport.hpscamera.com/error-analysis/error-9999.jpg',
-        },
-      ],
-    },
-  ]);
-
-  // Lọc các tool calls từ newItems
-  const toolCalls = result.newItems.filter((item) => item.type === 'tool_call_item');
-
-  console.log('Tools được sử dụng:');
-  toolCalls.forEach((item) => {
-    if (item.type === 'tool_call_item') {
-      const rawItem = item.rawItem;
-      if (rawItem && typeof rawItem === 'object' && 'name' in rawItem && 'arguments' in rawItem) {
-        const toolName = rawItem.name;
-        const toolArgs = rawItem.arguments;
-        let parsedArgs: unknown;
-        try {
-          if (typeof toolArgs === 'string') {
-            parsedArgs = JSON.parse(toolArgs);
-          } else {
-            parsedArgs = toolArgs;
-          }
-        } catch {
-          parsedArgs = toolArgs;
-        }
-        console.log(`  - Tool: ${toolName}`);
-        console.log(`    Parameters:`, parsedArgs);
-      }
+      stream: true,
+      maxTurns: 3,
     }
-  });
+  );
+
+  // stream
+  //   .toTextStream({
+  //     compatibleWithNodeStreams: true,
+  //   })
+  //   .pipe(process.stdout);
+
+  for await (const event of result) {
+    // // these are the raw events from the model
+    // if (event.type === 'raw_model_stream_event') {
+    //   console.log(event.type, event.data.type, event.data.delta);
+    // }
+    // // agent updated events
+    // if (event.type === 'agent_updated_stream_event') {
+    //   console.log(`${event.type} %s`, event.agent.name);
+    // }
+    // // Agent SDK specific events
+    // if (event.type === 'run_item_stream_event') {
+    //   console.log(`${event.type} %o`, event.item);
+    // }
+    switch (event.type) {
+      case 'agent_updated_stream_event':
+        break;
+      case 'raw_model_stream_event':
+        switch (event.data.type) {
+          case 'output_text_delta':
+            // console.log('delta:', event.data.delta);
+            process.stdout.write(event.data.delta);
+            break;
+          // case 'response_started':
+          //   console.log('response_started:', event.data);
+          //   break;
+          // case 'response_done':
+          //   console.log('response_started:', event.data);
+          //   break;
+        }
+        break;
+      case 'run_item_stream_event':
+        switch (event.item.type) {
+          case 'tool_call_item':
+            // const rawItem: any = event.item.rawItem;
+            console.log(
+              'tool_call_item',
+              (event.item.rawItem as any).name,
+              (event.item.rawItem as any).arguments
+            );
+            break;
+          case 'tool_call_output_item':
+            // const rawItem: any = event.item.rawItem;
+            console.log('tool_call_output_item', (event.item.rawItem as any).output);
+            break;
+        }
+        break;
+      default:
+    }
+  }
+
+  await result.completed;
 
   // Lấy thông tin token usage
   const usage = result.state.usage;
