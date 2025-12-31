@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { ImageAnalysisJSON } from "../types";
 
 /**
  * ===== OPENAI CLIENT =====
@@ -9,86 +10,52 @@ const openai = new OpenAI({
 
 /**
  * ===== SYSTEM PROMPT =====
+ * Yêu cầu trả về JSON chuẩn
  */
 const SYSTEM_PROMPT = `
-You are an AI image understanding engine for Retrieval-Augmented Generation (RAG).
+Bạn là một công cụ phân tích hình ảnh chuyên nghiệp cho hệ thống RAG.
+Nhiệm vụ của bạn là phân tích các hình ảnh kỹ thuật (ảnh chụp màn hình UI, sơ đồ, biểu đồ cấu hình).
 
-Your responsibilities:
-- Analyze technical images (UI screenshots, diagrams, configuration screens)
-- Extract visible text (OCR)
-- Understand the semantic meaning of the image
-- Ground the image in surrounding document context
-- Output a structured IMAGE_BLOCK in Markdown
-
-STRICT RULES:
-- Do NOT summarize the document
-- Do NOT invent information
-- Do NOT guess hidden values
-- If something is not visible, leave it empty
-- Images are first-class knowledge sources
-
-The output will be embedded and used directly for semantic retrieval.
-Accuracy is more important than style.
+QUY TẮC BẮT BUỘC:
+1. LUÔN LUÔN trả về định dạng JSON chuẩn.
+2. Trích xuất văn bản (OCR) chính xác từng từ.
+3. Phân tích ý nghĩa của ảnh dựa trên ngữ cảnh tài liệu được cung cấp.
+4. Nếu ảnh có bảng biểu, hãy chuyển đổi nó thành Markdown Table trong trường 'structured_data'.
+5. Không tự bịa đặt thông tin không có trong ảnh.
 `.trim();
 
 /**
  * ===== USER PROMPT BUILDER =====
  */
-function buildUserPrompt(
-    imageUrl: string,
-    context?: string
-): string {
+function buildUserPrompt(imageUrl: string, context?: string): string {
     return `
-DOCUMENT CONTEXT:
-${context || "(no surrounding text provided)"}
+NGỮ CẢNH TÀI LIỆU:
+${context || "(Không có thông tin ngữ cảnh)"}
 
-TASK:
-Analyze the image and produce an IMAGE_BLOCK in the following EXACT format:
+NHIỆM VỤ:
+Phân tích hình ảnh này và trả về một đối tượng JSON với các trường sau:
+- "visual_type": Loại ảnh (Ví dụ: "UI Screenshot", "Architecture Diagram", "Table")
+- "description": Mô tả chi tiết những gì ảnh đang thể hiện.
+- "ocr_text": Mảng các chuỗi văn bản xuất hiện trong ảnh.
+- "structured_data": (Tùy chọn) Chuyển đổi bảng/dữ liệu trong ảnh thành Markdown Table.
+- "context_summary": Hình ảnh này giúp trả lời câu hỏi cụ thể nào trong hệ thống RAG?
 
-[IMAGE_BLOCK]
-id: auto
-url: ${imageUrl}
-
-visual_type: UI | diagram | screenshot | chart | code | other
-
-context:
-- application_or_system:
-- screen_or_section:
-- user_action:
-
-visual_elements:
-- buttons:
-- menus:
-- labels:
-- highlighted_fields:
-
-extracted_text:
-- (OCR text if any)
-
-semantic_summary:
-- What concrete knowledge this image provides
-- What question this image helps answer in a RAG system
-[/IMAGE_BLOCK]
-
-IMPORTANT:
-- Do not hallucinate UI elements
-- semantic_summary must be useful for retrieval
+ĐỊNH DẠNG TRẢ VỀ: JSON.
+URL ẢNH: ${imageUrl}
 `.trim();
 }
 
 /**
- * =====================================================
- * 🔒 PUBLIC API – KEEP THIS FUNCTION
- * =====================================================
- * This function is intentionally kept for backward compatibility.
- * Other services depend on it.
+ * Phân tích hình ảnh bằng OpenAI Vision với JSON Mode
  */
 export async function analyzeImage(
     imageUrl: string,
     context?: string
 ): Promise<string> {
     const response = await openai.chat.completions.create({
-        model: process.env.OPENAI_IMAGE_ANALYTICS_MODEL!,
+        model: process.env.OPENAI_IMAGE_ANALYTICS_MODEL || "gpt-4o",
+        // Kích hoạt JSON Mode để đảm bảo kết quả luôn là JSON
+        response_format: { type: "json_object" },
         messages: [
             {
                 role: "system",
@@ -112,75 +79,38 @@ export async function analyzeImage(
         ],
     });
 
-    const outputText = response.choices[0]?.message?.content || "";
-
-    if (!outputText.trim()) {
-        throw new Error(
-            `[analyzeImage] Empty analysis result for image: ${imageUrl}`
-        );
-    }
-
-    return outputText.trim();
+    return response.choices[0]?.message?.content || "{}";
 }
 
 /**
- * ===== OPTIONAL HELPERS (NON-BREAKING) =====
- */
-
-/**
- * Safely trim long context to avoid token overflow
- */
-export function trimContext(
-    text?: string,
-    maxLength = 1500
-): string | undefined {
-    if (!text) return undefined;
-    if (text.length <= maxLength) return text;
-    return text.slice(0, maxLength) + "...";
-}
-
-/**
- * Parse IMAGE_BLOCK response to extract description and OCR text
+ * Parse kết quả từ analyzeImage. 
+ * Hàm này giờ đây cực kỳ an toàn vì chỉ cần JSON.parse
  */
 export function parseImageBlock(imageBlockText: string): {
     description: string;
     ocrText: string[];
 } {
-    const result = {
-        description: "",
-        ocrText: [] as string[],
-    };
-
     try {
-        // Extract semantic_summary as description
-        const summaryMatch = imageBlockText.match(
-            /semantic_summary:\s*([\s\S]*?)(?=\[\/IMAGE_BLOCK\]|$)/i
-        );
-        if (summaryMatch && summaryMatch[1]) {
-            const summaryLines = summaryMatch[1]
-                .split("\n")
-                .map((line) => line.replace(/^-\s*/, "").trim())
-                .filter((line) => line.length > 0);
-            result.description = summaryLines.join(" ");
+        const data: ImageAnalysisJSON = JSON.parse(imageBlockText);
+
+        // Kết hợp mô tả và dữ liệu cấu trúc (nếu có) để làm description phong phú hơn
+        let finalDescription = data.description;
+        if (data.structured_data) {
+            finalDescription += `\n\n**Dữ liệu bảng từ ảnh:**\n${data.structured_data}`;
+        }
+        if (data.context_summary) {
+            finalDescription += `\n\n**Giá trị RAG:** ${data.context_summary}`;
         }
 
-        // Extract OCR text
-        const ocrMatch = imageBlockText.match(
-            /extracted_text:\s*([\s\S]*?)(?=semantic_summary:|$)/i
-        );
-        if (ocrMatch && ocrMatch[1]) {
-            result.ocrText = ocrMatch[1]
-                .split("\n")
-                .map((line) => line.replace(/^-\s*/, "").trim())
-                .filter(
-                    (line) =>
-                        line.length > 0 &&
-                        !line.includes("(OCR text if any)")
-                );
-        }
+        return {
+            description: finalDescription,
+            ocrText: data.ocr_text || [],
+        };
     } catch (error) {
-        console.error("Error parsing IMAGE_BLOCK:", error);
+        console.error("[parseImageBlock] Lỗi khi parse JSON từ LLM:", error);
+        return {
+            description: "Không thể phân tích nội dung hình ảnh.",
+            ocrText: [],
+        };
     }
-
-    return result;
 }

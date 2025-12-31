@@ -5,13 +5,14 @@ import { v4 as uuidv4 } from 'uuid';
  * Upload an image buffer to Cloudflare R2 and return the public URL
  */
 export async function uploadToR2(
+    docId: string,
     imageBuffer: Buffer,
     contentType: string | null,
 ): Promise<string> {
     // Initialize S3 client for Cloudflare R2
     const s3Client = new S3Client({
         region: 'auto',
-        endpoint: process.env.R2_ENDPOINT!,
+        endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
         credentials: {
             accessKeyId: process.env.R2_ACCESS_KEY!,
             secretAccessKey: process.env.R2_SECRET_KEY!,
@@ -20,7 +21,7 @@ export async function uploadToR2(
 
     // Generate unique filename
     const extension = getExtensionFromContentType(contentType);
-    const filename = `images/${uuidv4()}${extension}`;
+    const filename = `images/${docId}/${uuidv4()}${extension}`;
 
     // Upload to R2
     const command = new PutObjectCommand({

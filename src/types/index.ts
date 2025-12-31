@@ -11,17 +11,19 @@ export interface ImageBlock {
 
 export type ContentBlock = TextBlock | ImageBlock;
 
-export interface ProcessedImage {
-    url: string;
-    description: string;
-    ocrText: string[];
-}
-
-// export interface R2Config {
-//     accountId: string;
-//     accessKeyId: string;
-//     secretAccessKey: string;
-//     bucketName: string;
-//     publicUrl: string;
-//     apiKey: string;
+// export interface ProcessedImage {
+//     url: string;
+//     description: string;
+//     ocrText: string[];
 // }
+
+/**
+ * Định nghĩa Interface cho dữ liệu trả về từ LLM
+ */
+export interface ImageAnalysisJSON {
+    visual_type: string;
+    description: string;
+    ocr_text: string[];
+    structured_data?: string; // Markdown table nếu có
+    context_summary: string;
+}
