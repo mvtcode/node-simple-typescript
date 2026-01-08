@@ -4,6 +4,11 @@ import * as path from 'path';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
 
+// Interface để lưu trữ breadcrumbs
+interface BreadcrumbData {
+  breadcrumbs: Array<{ title: string; url: string }>;
+}
+
 // Tạo thư mục lưu trữ nếu chưa có
 const outputDir = path.join(__dirname, '../output', 'md');
 if (!fs.existsSync(outputDir)) {
@@ -47,11 +52,61 @@ const crawler = new CheerioCrawler({
     log.debug($('body').html() || '');
 
     // TRÍCH XUẤT TITLE: Thường lấy từ thẻ <title> hoặc <h1> chính của bài viết
-    const pageTitle = $('title').text().split('|')[0].trim() || $('h1').first().text().trim() || 'No Title';
+    // const pageTitle = $('title').text().split('|')[0].trim() || $('h1').first().text().trim() || 'Trang chủ';
+    const pageTitle = $('.container.mt--100 main.main-content .HT_Header h4').text().trim() || 'Trang chủ';
 
-    await enqueueLinks({
-      strategy: 'same-domain',
-    });
+    // Kiểm tra xem có phải trang chủ không
+    const isHomepage = request.url === 'https://hotro.tingbox.vn' || request.url === 'https://hotro.tingbox.vn/';
+
+    // Lấy breadcrumbs từ userData (nếu có)
+    const parentBreadcrumbs = (request.userData as BreadcrumbData)?.breadcrumbs || [];
+
+    // Xây dựng breadcrumbs hiện tại
+    const currentBreadcrumbs: Array<{ title: string; url: string }> = [
+      ...parentBreadcrumbs,
+      { title: pageTitle, url: request.url }
+    ];
+
+    // PHÂN BIỆT XỬ LÝ TRANG CHỦ VÀ TRANG CON
+    if (isHomepage) {
+      // TRANG CHỦ: Theo rules cũ - enqueue tất cả same-domain links
+      log.info('Đang ở trang chủ - áp dụng same-domain strategy');
+      await enqueueLinks({
+        strategy: 'same-domain',
+        userData: {
+          breadcrumbs: currentBreadcrumbs
+        } as BreadcrumbData,
+      });
+    } else {
+      // TRANG CON: Chỉ enqueue các link có class "KTDt-link"
+      log.info('Đang ở trang con - chỉ theo link KTDt-link');
+      const ktdtLinks: string[] = [];
+      $('.KTDt-link a').each((_, el) => {
+        const href = $(el).attr('href');
+        const linkTitle = $(el).text().trim() || 'No Title';
+        if (href) {
+          try {
+            const absoluteUrl = new URL(href, request.url).href;
+            if (absoluteUrl.startsWith('https://hotro.tingbox.vn')) {
+              ktdtLinks.push(absoluteUrl);
+              log.info(`Tìm thấy link KTDt: ${linkTitle} - ${absoluteUrl}`);
+            }
+          } catch (e) {
+            log.error(`Lỗi URL: ${href}`);
+          }
+        }
+      });
+
+      // Enqueue các link đã tìm được với breadcrumbs
+      for (const link of ktdtLinks) {
+        await enqueueLinks({
+          urls: [link],
+          userData: {
+            breadcrumbs: currentBreadcrumbs
+          } as BreadcrumbData,
+        });
+      }
+    }
 
     // 1. Loại bỏ các thành phần gây nhiễu đặc thù của WordPress
     $(
@@ -121,18 +176,42 @@ const crawler = new CheerioCrawler({
       }
     });
 
+    // $('li > img, span > img, a > img').remove();
+    $('img[src*="icon-"], img[src*="gim.png"], img[src*="logo"], img[src*="light.png"]').remove();
+
     // 4. Lấy nội dung HTML đã bóc tách
     const htmlContent = $mainContent.html() || '';
 
-    // 5. Lưu vào file .html
+    // 5. Chuyển đổi sang Markdown
+    const markdownResult = turndown.turndown(htmlContent);
+
+    // 6. Xây dựng YAML frontmatter
+    const breadcrumbTitles = currentBreadcrumbs.map(item => item.title);
+    const title = pageTitle;
+    const category = breadcrumbTitles.length > 1 ? breadcrumbTitles[breadcrumbTitles.length - 2] : 'Trang chủ';
+
+    // Tạo breadcrumbs array cho YAML
+    const breadcrumbsArray = JSON.stringify(breadcrumbTitles);
+
+    // 7. Tạo YAML frontmatter
+    const yamlFrontmatter = `---
+title: ${title}
+breadcrumbs: ${breadcrumbsArray}
+url: "${request.url}"
+category: "${category}"
+---
+`;
+
+    // 8. Tạo nội dung markdown cuối cùng với YAML frontmatter
+    const markdownFinal = `${yamlFrontmatter}\n${markdownResult}`;
+
+    // 9. Lưu vào file .md
     // Tạo tên file an toàn từ URL
     const fileName = `${url.pathname.replace(/\//g, '_') || 'index'}.md`;
     const filePath = path.join(outputDir, fileName);
-    const markdownResult = turndown.turndown(htmlContent);
-    const markdownFinal = `# ${pageTitle}\n\n${markdownResult}`;
 
     fs.writeFileSync(filePath, markdownFinal, 'utf-8');
-    log.info(`Đã lưu: ${fileName}`);
+    log.info(`Đã lưu: ${fileName} - Breadcrumbs: ${breadcrumbTitles.join(' > ')}`);
   },
 
   // Xử lý khi lỗi
