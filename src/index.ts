@@ -50,7 +50,9 @@ const crawler = new CheerioCrawler({
 
   async requestHandler({ $, request, enqueueLinks }) {
     const url = new URL(request.url);
-    log.info(`Đang xử lý Page: ${request.url}`);
+    log.info(`Đang xử lý Page: ${request.url} (url: ${url.pathname})`);
+    const pathsDebug = ['/danh-muc/mpos-guide/cau-hoi-thuong-gap/'];
+    const isShowDebug = pathsDebug.includes(url.pathname);
 
     const pageTitle =
       $('.container.mt--100 main.main-content .HT_Header h4').text().trim() || 'Trang chủ';
@@ -72,6 +74,9 @@ const crawler = new CheerioCrawler({
 
     // PHÂN BIỆT XỬ LÝ TRANG CHỦ VÀ TRANG CON
     if (isHomepage) {
+      if (isShowDebug) {
+        log.info('==================Home page==================');
+      }
       // TRANG CHỦ: Theo rules cũ - enqueue tất cả same-domain links
       log.info('Đang ở trang chủ - áp dụng same-domain strategy');
       await enqueueLinks({
@@ -94,6 +99,9 @@ const crawler = new CheerioCrawler({
         } as BreadcrumbData,
       });
     } else {
+      if (isShowDebug) {
+        log.info('==================Child page==================');
+      }
       // TRANG CON: Chỉ enqueue các link có class "KTDt-link"
       log.info('Đang ở trang con - chỉ theo link KTDt-link');
       const ktdtLinks: string[] = [];
@@ -145,33 +153,54 @@ const crawler = new CheerioCrawler({
       // home page remove list link items
       $('.container.mt--100 .list-item ul.list li span:has(img), .VW-left-menu').remove();
 
-      // Kết hợp nội dung từ cả 2 vùng
-      const section1 = $('.container.mt--100');
-      const section2 = $('.container .asked-ques');
+      if (isHomepage) {
+        // Kết hợp nội dung từ cả 2 vùng
+        const section1 = $('.container.mt--100');
+        const section2 = $('.container .asked-ques');
 
-      // Tạo một wrapper để chứa cả 2 phần
-      $mainContent = $('<div></div>') as any;
-      if (section1.length > 0) {
-        $mainContent.append(section1.clone());
+        // Tạo một wrapper để chứa cả 2 phần
+        $mainContent = $('<div></div>') as any;
+        if (section1.length > 0) {
+          $mainContent.append(section1.clone());
+        }
+        if (section2.length > 0) {
+          $mainContent.append(section2.clone());
+        }
       }
-      if (section2.length > 0) {
-        $mainContent.append(section2.clone());
+
+      if (isShowDebug) {
+        log.info('==================Step 1==================');
       }
     }
 
     if ($mainContent.length === 0) {
       // content other
       $mainContent = $('.container.mt--100 main.main-content .KTDt-link');
+
+      if (isShowDebug) {
+        log.info('==================Step 2==================');
+      }
     }
 
     if ($mainContent.length === 0) {
       // content other
       $mainContent = $('.container.mt--100 main.main-content');
+
+      if (isShowDebug) {
+        log.info('==================Step 3==================');
+      }
     }
 
     // Cuối cùng mới lấy main hoặc body nếu các class trên không tồn tại
     if ($mainContent.length === 0) {
       // $mainContent = $('main').length ? $('main') : $('body');
+      if (isShowDebug) {
+        log.info('==================Step 4==================');
+      }
+      return;
+    }
+
+    if (pathsDebug.length > 0 && !isShowDebug) {
       return;
     }
 
