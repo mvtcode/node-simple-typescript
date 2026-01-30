@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "dev": "rimraf output && ts-node src/index.ts",
+    "dev": "ts-node src/index.ts",
     "dev:watch": "ts-node-dev --respawn --transpile-only src/index.ts",
     "start": "node dist/index.js",
     "clean": "rm -rf dist",

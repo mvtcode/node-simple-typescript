@@ -10,7 +10,7 @@ interface BreadcrumbData {
 }
 
 // Tạo thư mục lưu trữ nếu chưa có
-const outputDir = path.join(__dirname, '../output', 'md');
+const outputDir = path.join(__dirname, '../output', 'tingbox');
 if (!fs.existsSync(outputDir)) {
   fs.mkdirSync(outputDir, { recursive: true });
 }
@@ -29,12 +29,14 @@ const crawler = new CheerioCrawler({
   preNavigationHooks: [
     async ({ request }) => {
       request.headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Accept:
+          'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
         'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
         'Accept-Encoding': 'gzip, deflate, br',
-        'Referer': 'https://hotro.tingbox.vn',
-        'Connection': 'keep-alive',
+        Referer: 'https://hotro.tingbox.vn',
+        Connection: 'keep-alive',
         'Upgrade-Insecure-Requests': '1',
         'Sec-Fetch-Dest': 'document',
         'Sec-Fetch-Mode': 'navigate',
@@ -53,10 +55,12 @@ const crawler = new CheerioCrawler({
 
     // TRÍCH XUẤT TITLE: Thường lấy từ thẻ <title> hoặc <h1> chính của bài viết
     // const pageTitle = $('title').text().split('|')[0].trim() || $('h1').first().text().trim() || 'Trang chủ';
-    const pageTitle = $('.container.mt--100 main.main-content .HT_Header h4').text().trim() || 'Trang chủ';
+    const pageTitle =
+      $('.container.mt--100 main.main-content .HT_Header h4').text().trim() || 'Trang chủ';
 
     // Kiểm tra xem có phải trang chủ không
-    const isHomepage = request.url === 'https://hotro.tingbox.vn' || request.url === 'https://hotro.tingbox.vn/';
+    const isHomepage =
+      request.url === 'https://hotro.tingbox.vn' || request.url === 'https://hotro.tingbox.vn/';
 
     // Lấy breadcrumbs từ userData (nếu có)
     const parentBreadcrumbs = (request.userData as BreadcrumbData)?.breadcrumbs || [];
@@ -64,7 +68,7 @@ const crawler = new CheerioCrawler({
     // Xây dựng breadcrumbs hiện tại
     const currentBreadcrumbs: Array<{ title: string; url: string }> = [
       ...parentBreadcrumbs,
-      { title: pageTitle, url: request.url }
+      { title: pageTitle, url: request.url },
     ];
 
     // PHÂN BIỆT XỬ LÝ TRANG CHỦ VÀ TRANG CON
@@ -74,7 +78,7 @@ const crawler = new CheerioCrawler({
       await enqueueLinks({
         strategy: 'same-domain',
         userData: {
-          breadcrumbs: currentBreadcrumbs
+          breadcrumbs: currentBreadcrumbs,
         } as BreadcrumbData,
       });
     } else {
@@ -102,7 +106,7 @@ const crawler = new CheerioCrawler({
         await enqueueLinks({
           urls: [link],
           userData: {
-            breadcrumbs: currentBreadcrumbs
+            breadcrumbs: currentBreadcrumbs,
           } as BreadcrumbData,
         });
       }
@@ -111,10 +115,10 @@ const crawler = new CheerioCrawler({
     // 1. Loại bỏ các thành phần gây nhiễu đặc thù của WordPress
     $(
       'header, footer, nav, aside, script, style, .admin-bar, ' +
-      '.entry-meta, .nav-links, .widget-area, #comments, .sharedaddy, ' +
-      '.wp-embed-responsive, .related-posts, ' +
-      '.container.mt--100 main.main-content .KTDt-link ul > li a img, ' +
-      '.container.mt--100 main.main-content .HT_Header a'
+        '.entry-meta, .nav-links, .widget-area, #comments, .sharedaddy, ' +
+        '.wp-embed-responsive, .related-posts, ' +
+        '.container.mt--100 main.main-content .KTDt-link ul > li a img, ' +
+        '.container.mt--100 main.main-content .HT_Header a'
     ).remove();
 
     // 2. Xác định vùng chứa nội dung chính tối ưu cho WordPress
@@ -152,7 +156,7 @@ const crawler = new CheerioCrawler({
       $mainContent = $('.container.mt--100');
     } else {
       // remove img icon back to right
-      // $('.container.mt--100 main.main-content .HT_Header a').remove();
+      $('.container.mt--100 main.main-content .HT_Header').remove();
     }
 
     // Cuối cùng mới lấy main hoặc body nếu các class trên không tồn tại
@@ -186,9 +190,10 @@ const crawler = new CheerioCrawler({
     const markdownResult = turndown.turndown(htmlContent);
 
     // 6. Xây dựng YAML frontmatter
-    const breadcrumbTitles = currentBreadcrumbs.map(item => item.title);
+    const breadcrumbTitles = currentBreadcrumbs.map((item) => item.title);
     const title = pageTitle;
-    const category = breadcrumbTitles.length > 1 ? breadcrumbTitles[breadcrumbTitles.length - 2] : 'Trang chủ';
+    const category =
+      breadcrumbTitles.length > 1 ? breadcrumbTitles[breadcrumbTitles.length - 2] : 'Trang chủ';
 
     // Tạo breadcrumbs array cho YAML
     const breadcrumbsArray = JSON.stringify(breadcrumbTitles);
@@ -200,6 +205,9 @@ breadcrumbs: ${breadcrumbsArray}
 url: "${request.url}"
 category: "${category}"
 ---
+
+# ${title}
+
 `;
 
     // 8. Tạo nội dung markdown cuối cùng với YAML frontmatter
