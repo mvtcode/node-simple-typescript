@@ -2,7 +2,7 @@ import { CheerioCrawler, log } from 'crawlee';
 import * as fs from 'fs';
 import * as path from 'path';
 import TurndownService from 'turndown';
-import { tables } from 'turndown-plugin-gfm';
+import { gfm } from 'turndown-plugin-gfm';
 
 // Interface để lưu trữ breadcrumbs
 interface BreadcrumbData {
@@ -19,8 +19,7 @@ const turndown = new TurndownService({
   headingStyle: 'atx',
   codeBlockStyle: 'fenced',
 });
-// Sử dụng plugin tables để convert HTML tables sang Markdown
-turndown.use(tables);
+turndown.use(gfm);
 
 const crawler = new CheerioCrawler({
   // Giới hạn để tránh spam server hoặc test nhanh
@@ -36,7 +35,7 @@ const crawler = new CheerioCrawler({
           'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
         'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
         'Accept-Encoding': 'gzip, deflate, br',
-        Referer: 'https://chuyendoiso.nextpay.vn/mpos-guide/',
+        Referer: 'https://hotro-digital.mpos.vn',
         Connection: 'keep-alive',
         'Upgrade-Insecure-Requests': '1',
         'Sec-Fetch-Dest': 'document',
@@ -50,18 +49,17 @@ const crawler = new CheerioCrawler({
 
   async requestHandler({ $, request, enqueueLinks }) {
     const url = new URL(request.url);
-    log.info(`Đang xử lý Page: ${request.url} (url: ${url.pathname})`);
-    const pathsDebug = ['/danh-muc/mpos-guide/cau-hoi-thuong-gap/'];
-    const isShowDebug = pathsDebug.includes(url.pathname);
+    log.info(`Đang xử lý Page: ${request.url}`);
 
+    log.debug($('body').html() || '');
+
+    // TRÍCH XUẤT TITLE: Thường lấy từ thẻ <title> hoặc <h1> chính của bài viết
+    // const pageTitle = $('title').text().split('|')[0].trim() || $('h1').first().text().trim() || 'Trang chủ';
     const pageTitle =
       $('.container.mt--100 main.main-content .HT_Header h4').text().trim() || 'Trang chủ';
 
     // Kiểm tra xem có phải trang chủ không
-    const isHomepage = [
-      'https://chuyendoiso.nextpay.vn/mpos-guide',
-      'https://chuyendoiso.nextpay.vn/mpos-guide/',
-    ].includes(request.url);
+    // const isHomepage = ['https://hotro-digital.mpos.vn', 'https://hotro-digital.mpos.vn/'].includes(request.url);
 
     // Lấy breadcrumbs từ userData (nếu có)
     const parentBreadcrumbs = (request.userData as BreadcrumbData)?.breadcrumbs || [];
@@ -72,139 +70,42 @@ const crawler = new CheerioCrawler({
       { title: pageTitle, url: request.url },
     ];
 
-    // PHÂN BIỆT XỬ LÝ TRANG CHỦ VÀ TRANG CON
-    if (isHomepage) {
-      if (isShowDebug) {
-        log.info('==================Home page==================');
-      }
-      // TRANG CHỦ: Theo rules cũ - enqueue tất cả same-domain links
-      log.info('Đang ở trang chủ - áp dụng same-domain strategy');
-      await enqueueLinks({
-        strategy: 'same-domain',
-        // Chỉ enqueue các URLs có pattern cụ thể
-        transformRequestFunction: (req) => {
-          const url = new URL(req.url);
-          const pathname = url.pathname;
-
-          // Chỉ cho phép URLs bắt đầu với /danh-muc/mpos-guide/ hoặc /mpos-guide
-          if (pathname.startsWith('/danh-muc/mpos-guide/') || pathname.startsWith('/mpos-guide')) {
-            return req;
-          }
-
-          // Bỏ qua các URLs không khớp pattern
-          return false;
-        },
-        userData: {
-          breadcrumbs: currentBreadcrumbs,
-        } as BreadcrumbData,
-      });
-    } else {
-      if (isShowDebug) {
-        log.info('==================Child page==================');
-      }
-      // TRANG CON: Chỉ enqueue các link có class "KTDt-link"
-      log.info('Đang ở trang con - chỉ theo link KTDt-link');
-      const ktdtLinks: string[] = [];
-      $('.KTDt-link a').each((_, el) => {
-        const href = $(el).attr('href');
-        const linkTitle = $(el).text().trim() || 'No Title';
-        if (href) {
-          try {
-            const absoluteUrl = new URL(href, request.url).href;
-            if (
-              absoluteUrl.startsWith('https://chuyendoiso.nextpay.vn/danh-muc/mpos-guide') ||
-              absoluteUrl.startsWith('https://chuyendoiso.nextpay.vn/mpos-guide')
-            ) {
-              ktdtLinks.push(absoluteUrl);
-              log.info(`Tìm thấy link KTDt: ${linkTitle} - ${absoluteUrl}`);
-            }
-          } catch {
-            log.error(`Lỗi URL: ${href}`);
-          }
-        }
-      });
-
-      // Enqueue các link đã tìm được với breadcrumbs
-      for (const link of ktdtLinks) {
-        await enqueueLinks({
-          urls: [link],
-          userData: {
-            breadcrumbs: currentBreadcrumbs,
-          } as BreadcrumbData,
-        });
-      }
-    }
+    await enqueueLinks({
+      strategy: 'same-domain',
+      userData: {
+        breadcrumbs: currentBreadcrumbs,
+      } as BreadcrumbData,
+    });
 
     // 1. Loại bỏ các thành phần gây nhiễu đặc thù của WordPress
     $(
-      'header, footer, aside, script, style, .admin-bar, ' +
+      'header, footer, nav, aside, script, style, .admin-bar, ' +
         '.entry-meta, .nav-links, .widget-area, #comments, .sharedaddy, ' +
         '.wp-embed-responsive, .related-posts, ' +
         '.container.mt--100 main.main-content .KTDt-link ul > li a img, ' +
-        '.container.mt--100 main.main-content .HT_Header a, ' +
-        '.container.mt--100 .box-search'
+        '.container.mt--100 main.main-content .HT_Header a'
     ).remove();
 
     // 2. Xác định vùng chứa nội dung chính tối ưu cho WordPress
-    // Content page detail
-    let $mainContent = $('.container.mt--100 main.main-content .KT-Detail');
+    // Content detail page
+    let $mainContent = $('.container.mt--100 main.main-content');
 
     if ($mainContent.length === 0) {
       // home page remove list link items
-      $('.container.mt--100 .list-item ul.list li span:has(img), .VW-left-menu').remove();
-
-      if (isHomepage) {
-        // Kết hợp nội dung từ cả 2 vùng
-        const section1 = $('.container.mt--100');
-        const section2 = $('.container .asked-ques');
-
-        // Tạo một wrapper để chứa cả 2 phần
-        $mainContent = $('<div></div>') as any;
-        if (section1.length > 0) {
-          $mainContent.append(section1.clone());
-        }
-        if (section2.length > 0) {
-          $mainContent.append(section2.clone());
-        }
-      }
-
-      if (isShowDebug) {
-        log.info('==================Step 1==================');
-      }
-    }
-
-    if ($mainContent.length === 0) {
-      // content other
-      $mainContent = $('.container.mt--100 main.main-content .KTDt-link');
-
-      if (isShowDebug) {
-        log.info('==================Step 2==================');
-      }
-    }
-
-    if ($mainContent.length === 0) {
-      // content other
-      $mainContent = $('.container.mt--100 main.main-content');
-
-      if (isShowDebug) {
-        log.info('==================Step 3==================');
-      }
+      $('.container.mt--100 .list-item ul.list li span:has(img)').remove();
+      $('.container.mt--100 .list-item .banner-kichhoat span:has(img)').remove();
+      $mainContent = $('.container.mt--100');
+    } else {
+      // remove img icon back to right
+      $('.container.mt--100 main.main-content .HT_Header').remove();
     }
 
     // Cuối cùng mới lấy main hoặc body nếu các class trên không tồn tại
     if ($mainContent.length === 0) {
-      // $mainContent = $('main').length ? $('main') : $('body');
-      if (isShowDebug) {
-        log.info('==================Step 4==================');
-      }
-      return;
+      $mainContent = $('main').length ? $('main') : $('body');
     }
 
-    if (pathsDebug.length > 0 && !isShowDebug) {
-      return;
-    }
-
-    // 4. Xử lý Image: Chuyển link tuyệt đối (như cũ)
+    // 3. Xử lý Image: Chuyển link tuyệt đối (như cũ)
     $mainContent.find('img').each((_, el) => {
       const src = $(el).attr('src');
       if (src) {
@@ -214,16 +115,14 @@ const crawler = new CheerioCrawler({
           // WordPress thường có srcset cho ảnh responsive, nên xóa đi để dễ xử lý ở bước sau
           $(el).removeAttr('srcset');
           $(el).removeAttr('sizes');
-        } catch {
+        } catch (e) {
           log.error(`Lỗi URL ảnh: ${src}`);
         }
       }
     });
 
     // $('li > img, span > img, a > img').remove();
-    $(
-      'img[src*="icon-"], img[src*="icon"], img[src*="gim.png"], img[src*="logo"], img[src*="light.png"]'
-    ).remove();
+    $('img[src*="icon-"], img[src*="gim.png"], img[src*="logo"], img[src*="light.png"]').remove();
 
     // 4. Lấy nội dung HTML đã bóc tách
     const htmlContent = $mainContent.html() || '';
@@ -249,6 +148,7 @@ category: "${category}"
 ---
 
 # ${title}
+
 `;
 
     // 8. Tạo nội dung markdown cuối cùng với YAML frontmatter
@@ -271,6 +171,6 @@ category: "${category}"
 
 // Chạy Crawler với URL bắt đầu
 (async () => {
-  await crawler.run(['https://chuyendoiso.nextpay.vn/mpos-guide/']);
+  await crawler.run(['https://hotro-digital.mpos.vn/']);
   log.info('--- Hoàn thành Bước 1: Crawl và Lưu HTML ---');
 })();
