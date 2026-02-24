@@ -12,7 +12,7 @@ const crawler = new PlaywrightCrawler({
     if (request.label === 'DETAIL') {
       // detail page
       await page.waitForLoadState('networkidle');
-      const links = await page.locator('#contentWrap ul.sub-list li a.subContent');
+      const links = page.locator('#contentWrap ul.sub-list li a.subContent');
       const count = await links.count();
       const title = $('#title').text();
       for (let i = 0; i < count; i++) {
