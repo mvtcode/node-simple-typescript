@@ -1,99 +1,78 @@
-import dotenv from 'dotenv';
-dotenv.config();
-
 import { PlaywrightCrawler } from 'crawlee';
+import readline from 'readline/promises';
+import { stdin as input, stdout as output } from 'process';
 
-const crawler = new PlaywrightCrawler({
-  maxRequestsPerCrawl: 50,
-  async requestHandler({ request, page, parseWithCheerio, enqueueLinks, pushData, log }) {
-    log.info(`Crawling: ${request.loadedUrl}`);
-    const $ = await parseWithCheerio();
+const questionid = 70007;
 
-    if (request.label === 'DETAIL') {
-      // detail page
-      await page.waitForLoadState('networkidle');
-      const links = page.locator('#contentWrap ul.sub-list li a.subContent');
-      const count = await links.count();
-      const title = $('#title').text();
-      for (let i = 0; i < count; i++) {
-        const link = links.nth(i);
+async function main() {
+  const rl = readline.createInterface({ input, output });
 
-        const subTitle = await link.innerText();
-        const url = (await link.getAttribute('href')) || '';
+  try {
+    const answer = await rl.question('Nhập số lượng vote: ');
+    const voteCount = parseInt(answer.trim(), 10);
 
-        // Click
-        await link.click();
-        await page.waitForLoadState('networkidle'); // đợi ajax
-        await page.waitForTimeout(1000);
-
-        const $$ = await parseWithCheerio();
-
-        // Đọc content
-        $$('#contentBody').find('script').remove();
-        $$('#contentBody')
-          .find('*')
-          .filter(function () {
-            return $$(this).css('display') === 'none';
-          })
-          .remove();
-        const content = $$('#contentBody').html();
-
-        await pushData({
-          title,
-          subTitle,
-          label: 'AJAX',
-          url: url.startsWith('#') ? `${request.loadedUrl}${url}` : url,
-          refer: request.headers?.['Referer'],
-          content,
-        });
-        await page.waitForTimeout(500);
-      }
-    } else {
-      // home page
-      const title = (
-        ($('.wpsPortletBody .lotusui').text() || (await page.title())) as string
-      ).trim();
-      $('.wpsPortletBody script').remove();
-      const content = $('.wpsPortletBody .lotusWidgetBody3').html();
-      const url = request.loadedUrl;
-      await pushData({
-        title,
-        label: request.label,
-        url,
-        refer: request.headers?.['Referer'],
-        content,
-      });
+    if (isNaN(voteCount) || voteCount <= 0) {
+      console.log('Số lượng vote không hợp lệ! Vui lòng nhập một số nguyên dương.');
+      return;
     }
 
-    await enqueueLinks({
-      // strategy: 'same-origin',
-      selector: '.wpsPortletBody .lotusWidgetBody3 a',
-      label: 'DETAIL',
-      transformRequestFunction: (req) => {
-        return {
-          ...req,
-          headers: {
-            'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            Referer: request.loadedUrl,
-          },
-          keepUrlFragment: false,
-        };
+    console.log(`Bắt đầu thực hiện ${voteCount} lượt vote...`);
+
+    const crawler = new PlaywrightCrawler({
+      maxRequestsPerCrawl: voteCount,
+      requestHandlerTimeoutSecs: 60,
+      // maxConcurrency giúp kiểm soát số lượng browser mở song song để tránh quá tải RAM/CPU.
+      // Bạn có thể tùy chỉnh giá trị này (ví dụ: 1, 2, 3...)
+      maxConcurrency: 2,
+
+      async requestHandler({ request, page, parseWithCheerio, log }) {
+        const index = request.userData.index + 1;
+        log.info(`[Lượt ${index}/${voteCount}] Đang mở url: ${request.loadedUrl}`);
+
+        await page.waitForLoadState('domcontentloaded');
+        const $ = await parseWithCheerio();
+        log.info(`[Lượt ${index}/${voteCount}] Tải trang thành công!`);
+
+        const radioButtons = $(
+          `#vote-${questionid} .wrap_answer .item_row_bx .label_check`
+        ).toArray();
+
+        for (const divLabel of radioButtons) {
+          const text = $(divLabel).find('.text_ans').text().trim();
+          const value = String($(divLabel).find('input').val() || '');
+
+          if (text.toLocaleLowerCase().includes('không muốn')) {
+            log.info(`[Lượt ${index}/${voteCount}] Chọn phương án: "${text}" (Value: ${value})`);
+
+            await page
+              .locator(`#vote-${questionid} input[value="${value}"]`)
+              .click({ force: true });
+            await page.waitForTimeout(500);
+            await page.click(`#btn_add_vote_${questionid}`);
+            await page.waitForTimeout(1000);
+
+            log.info(`[Lượt ${index}/${voteCount}] Vote thành công!`);
+            return; // Trả về để Crawlee tiếp tục request tiếp theo, không sử dụng process.exit(0)
+          }
+        }
       },
     });
-  },
 
-  // Uncomment this option to see the browser window.
-  // headless: false,
-});
+    // Tạo danh sách các request với uniqueKey khác nhau
+    // để tránh việc Crawlee tự động lọc trùng các URL giống nhau.
+    const requests = Array.from({ length: voteCount }, (_, i) => ({
+      url: 'https://vnexpress.net/nguoi-tieu-dung-dan-coi-mo-voi-xang-sinh-hoc-e10-5074369.html',
+      uniqueKey: `vote-${i}-${Date.now()}`,
+      userData: { index: i },
+    }));
 
-(async () => {
-  await crawler.run([
-    'https://www.gdt.gov.vn/wps/portal/!ut/p/z1/04_Sj9CPykssy0xPLMnMz0vMAfIjo8zinQO9ncO8wwwM3D0szQ08fUNNA0KNHA0sHM31wwkpiAJKG-AAjgZA_VFgJc7ujh4m5j4GBhYm7gYGniZO_n4ezoGGBp7GUAV4zCjIjTDIdFRUBAAyRnXb/dz/d5/L2dBISEvZ0FBIS9nQSEh/',
-  ]);
+    await crawler.run(requests);
+    console.log(`\nChúc mừng! Đã hoàn thành toàn bộ ${voteCount} lượt vote!`);
+  } catch (error) {
+    console.error('Đã xảy ra lỗi trong quá trình thực hiện:', error);
+  } finally {
+    rl.close();
+  }
+}
 
-  // const dataset = await Dataset.open();
-  // const { items } = await dataset.getData();
-
-  // console.log(items);
-})();
+main();
