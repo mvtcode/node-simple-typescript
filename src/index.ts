@@ -2,7 +2,7 @@ import { PlaywrightCrawler } from 'crawlee';
 import readline from 'readline/promises';
 import { stdin as input, stdout as output } from 'process';
 
-const questionid = 70007;
+const questionid = 70322;
 
 async function main() {
   const rl = readline.createInterface({ input, output });
@@ -41,7 +41,7 @@ async function main() {
           const text = $(divLabel).find('.text_ans').text().trim();
           const value = String($(divLabel).find('input').val() || '');
 
-          if (text.toLocaleLowerCase().includes('không muốn')) {
+          if (text.toLocaleLowerCase().includes('trên 10%')) {
             log.info(`[Lượt ${index}/${voteCount}] Chọn phương án: "${text}" (Value: ${value})`);
 
             await page
@@ -61,7 +61,7 @@ async function main() {
     // Tạo danh sách các request với uniqueKey khác nhau
     // để tránh việc Crawlee tự động lọc trùng các URL giống nhau.
     const requests = Array.from({ length: voteCount }, (_, i) => ({
-      url: 'https://vnexpress.net/nguoi-tieu-dung-dan-coi-mo-voi-xang-sinh-hoc-e10-5074369.html',
+      url: 'https://vnexpress.net/xang-e10-co-khien-xe-hao-xang-may-yeu-5077871.html',
       uniqueKey: `vote-${i}-${Date.now()}`,
       userData: { index: i },
     }));
