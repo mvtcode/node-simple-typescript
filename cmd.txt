@@ -1,0 +1,17 @@
+# 1. Build docker image
+docker build -t node-upload-service .
+
+# 2. Run container cơ bản
+docker run -d --name upload-service -p 3000:3000 -v $(pwd)/uploads:/app/public node-upload-service
+
+# 3. Export image ra file .zip (để mang sang máy khác)
+docker save -o node-upload-service.zip node-upload-service:latest
+
+# 4. Import image từ file .zip vào Docker Engine
+docker load -i node-upload-service.zip
+
+# 5. Run production & with env & volume & auto restart
+docker run --restart always -d --name upload-service -p 3000:3000 -v $(pwd)/uploads:/app/public -e APP_PORT=3000 -e APP_BASE_PATH=/api/upload -e PUBLIC_PATH=public node-upload-service
+
+# 6. Run production & with env file & volume & auto restart
+docker run --restart always -d --name upload-service -p 3000:3000 -v $(pwd)/uploads:/app/public --env-file .env node-upload-service
